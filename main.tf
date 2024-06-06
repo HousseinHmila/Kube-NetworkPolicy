@@ -88,6 +88,40 @@ resource "aws_instance" "master" {
     }
   }
 }
+# Define the first Nginx pod
+resource "kubernetes_pod" "mypod_1" {
+  metadata {
+    name = "mypod-1"
+  }
+
+  spec {
+    container {
+      image = "nginx:latest"
+      name  = "nginx"
+      port {
+        container_port = 80
+      }
+    }
+  }
+}
+
+# Define the second Nginx pod
+resource "kubernetes_pod" "mypod_2" {
+  metadata {
+    name = "mypod-2"
+  }
+
+  spec {
+    container {
+      image = "nginx:latest"
+      name  = "nginx"
+      port {
+        container_port = 80
+      }
+    }
+  }
+}
+
 
 
 # Output the master public IP
