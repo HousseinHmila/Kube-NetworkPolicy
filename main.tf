@@ -1,131 +1,46 @@
 # Define the provider
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.0"
+    }
+  }
+}
 provider "aws" {
-  region = "us-west-2" # region
-}
-
-# Define the VPC
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}
-
-# Define the subnet
-resource "aws_subnet" "subnet" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-west-2a" # availability zone
-}
-
-# Define the security group
-resource "aws_security_group" "allow_all" {
-  name        = "allow_all"
-  description = "Allow all inbound traffic"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  region  = "eu-west-2"
 }
 
 # Define the EC2 instance for the master node
 resource "aws_instance" "master" {
-  ami           = "ami-0c55b159cbfafe1f0" #  AMI
+  ami           = "ami-09627c82937ccdd6d" #  AMI
   instance_type = "t2.medium"
-  subnet_id     = aws_subnet.subnet.id
-  security_groups = [aws_security_group.allow_all.name]
+  user_data     = <<EOF
+#!/bin/bash
+echo "Copying the SSH Key to the server"
+echo -e "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCzsv8IPzbwJLbkpwppawFb1GLhRXVlV77u58IQuByeKoWPv4tGcMNpQ+TDrI4hiKaY1AJzhV12NQqV/WqEC7Y9UV5ZB0gx8I0MWAlpgvRyK4j5wN+HdBPBa0uE7GHbHBDVqLbXKP/7pe5eNpIESCiFEdXis4MZJT63ShVaDMH1TEnvq71vY3WJqm28DnrrkHTyfgNn/ukQzWf6jAr6nnLEaj3OSJIGVvKZLXgw4C8zi2m/7Ang2gJ2CJpB4v+gbXXxBJT7EfOI5m5wMXPnA4g14Ydr3cUshLiMoGr+OuKAYWtlcHseva6Wj1MQH8NftEXY4SWGZNW6S9Sd9l4DlxOHyBDwKjZWzWH2CQdUd3FQ4CZOyXqeQ5AHOYql4RzZKT/R0fX5rmcSz05MIS7os2H5N+H27E78ATE+CeFDTzr5UcrYUbBuyPsrdMzvn1zwGSLKCSTdQHtRajhh1SF9UbQGCDojHCBe7NS6kuCFFraeJLfhqRYPE5A1NMmact3JKHCEtvLGrYU2zqb0440gY4sPSyLPdz8gErFHSrWBFNcYOc5V1lrXN2Tj5cpw3Nw3zAJQG9UxUY0biaE0Wc9G0FsPyA9G3iwlOXklkGsBWl6VbzZ4kDM8Blm156Nq6jr7bJQhLw6zhasdLo0k4Djz8v580JXQKKxnJWZvnlVuxuwLww== houssein@strass-GL553VD" >> /home/ubuntu/.ssh/authorized_keys
 
+EOF
   tags = {
     Name = "k8s-master"
   }
-
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get update",
-      "sudo apt-get install -y apt-transport-https ca-certificates curl",
-      "sudo curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg",
-      "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main' | sudo tee /etc/apt/sources.list.d/kubernetes.list",
-      "sudo apt-get update",
-      "sudo apt-get install -y kubelet kubeadm kubectl cri-tools",
-      "sudo apt-mark hold kubelet kubeadm kubectl",
-      "cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf",
-      "overlay",
-      "br_netfilter",
-      "EOF",
-      "modprobe overlay",
-      "modprobe br_netfilter",
-      "cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf",
-      "net.bridge.bridge-nf-call-iptables  = 1",
-      "net.ipv4.ip_forward                 = 1",
-      "net.bridge.bridge-nf-call-ip6tables = 1",
-      "EOF",
-      "sysctl --system",
-      "apt-get install -y containerd",
-      "mkdir -p /etc/containerd",
-      "containerd config default > /etc/containerd/config.toml",
-      "sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml",
-      "systemctl restart containerd",
-      "kubeadm init --pod-network-cidr=10.244.0.0/16",
-      "mkdir -p $HOME/.kube",
-      "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config",
-      "sudo chown $(id -u):$(id -g) $HOME/.kube/config",
-      "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
+      "curl -O https://raw.githubusercontent.com/HousseinHmila/kube/main/script.sh",
+      "chmod +x script.sh",
+      "./script.sh"
     ]
-
     connection {
-      type     = "ssh"
-      user     = "ubuntu" # Change to your instance user
-      private_key = file("~/.ssh/id_rsa") # Change to your private key path
-      host     = self.public_ip
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("./.ssh/id_rsa")
+      host        = self.public_ip
     }
   }
+
+
 }
-# Define the first Nginx pod
-resource "kubernetes_pod" "mypod_1" {
-  metadata {
-    name = "mypod-1"
-  }
-
-  spec {
-    container {
-      image = "nginx:latest"
-      name  = "nginx"
-      port {
-        container_port = 80
-      }
-    }
-  }
-}
-
-# Define the second Nginx pod
-resource "kubernetes_pod" "mypod_2" {
-  metadata {
-    name = "mypod-2"
-  }
-
-  spec {
-    container {
-      image = "nginx:latest"
-      name  = "nginx"
-      port {
-        container_port = 80
-      }
-    }
-  }
-}
-
-
-
-# Output the master public IP
-output "master_public_ip" {
-  value = aws_instance.master.public_ip
-}
-
